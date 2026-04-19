@@ -50,6 +50,15 @@ chmod +x \
 	"$BIN_DIR/install-voice-control-command.sh" \
 	"$BIN_DIR/install-siri-shortcut.sh"
 
+# Pre-trust $HOME in ~/.claude.json so Claude Code's "Do you trust the files
+# in this folder?" dialog doesn't stall the launcher. For a blind user, any
+# interactive prompt is a failure mode — skip it proactively.
+if [ -f "$SCRIPT_DIR/scripts/pre-trust-directory.py" ]; then
+	echo "==> Pre-trusting \$HOME for Claude Code (skip 'trust this folder?' prompt)"
+	python3 "$SCRIPT_DIR/scripts/pre-trust-directory.py" "$HOME" || \
+		echo "    (skipped — ~/.claude.json not initialized yet; will apply on re-run)"
+fi
+
 # Compile .app bundle
 echo "==> Compiling $APP_PATH"
 rm -rf "$APP_PATH"

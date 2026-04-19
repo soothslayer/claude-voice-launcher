@@ -37,7 +37,8 @@ The installer:
 2. Compiles `~/Applications/Claude Voice.app` via `osacompile`.
 3. Sets a stable bundle identifier so macOS remembers granted permissions.
 4. Creates a symlink at `~/Desktop/Claude Voice.app`.
-5. Launches the **interactive, voice-narrated permissions setup** which opens each required System Settings pane and tells you what to toggle.
+5. **Pre-accepts Claude Code's "Do you trust the files in this folder?" dialog** for `$HOME` (the directory the launcher uses) by writing `hasTrustDialogAccepted: true` into `~/.claude.json` under `projects.$HOME`. Skips a guaranteed stall for a blind user. Run `python3 scripts/pre-trust-directory.py /path/to/dir` to pre-trust any other directory.
+6. Launches the **interactive, voice-narrated permissions setup** which opens each required System Settings pane and tells you what to toggle.
 
 ## How to trigger it
 
