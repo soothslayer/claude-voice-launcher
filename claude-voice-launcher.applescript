@@ -87,12 +87,14 @@ on classifyWindowContents(contentsText)
 end classifyWindowContents
 
 on findClaudeWindow()
-	-- Returns a record {winIndex: N, state: "..."} for the best matching window,
-	-- or {winIndex: 0, state: "none"} if nothing useful found.
+	-- Returns {winID: N, state: "..."} for the best matching window, where
+	-- winID is the STABLE Terminal window id (not the positional index — the
+	-- index shifts as soon as we reorder windows, making later references
+	-- point to the wrong window).
 	-- Preference order: claude-idle > claude-busy > shell > nothing.
-	set bestIdle to 0
-	set bestBusy to 0
-	set bestShell to 0
+	set bestIdle to missing value
+	set bestBusy to missing value
+	set bestShell to missing value
 	tell application "Terminal"
 		try
 			set winCount to count of windows
@@ -101,32 +103,63 @@ on findClaudeWindow()
 		end try
 		repeat with i from 1 to winCount
 			try
-				set winContents to contents of tab 1 of window i
+				set w to window i
+				set wID to id of w
+				set winContents to contents of tab 1 of w
 				set state to my classifyWindowContents(winContents)
-				if state is "claude-idle" and bestIdle is 0 then set bestIdle to i
-				if state is "claude-busy" and bestBusy is 0 then set bestBusy to i
-				if state is "shell" and bestShell is 0 then set bestShell to i
+				if state is "claude-idle" and bestIdle is missing value then set bestIdle to wID
+				if state is "claude-busy" and bestBusy is missing value then set bestBusy to wID
+				if state is "shell" and bestShell is missing value then set bestShell to wID
 			end try
 		end repeat
 	end tell
-	if bestIdle > 0 then return {winIndex:bestIdle, state:"claude-idle"}
-	if bestBusy > 0 then return {winIndex:bestBusy, state:"claude-busy"}
-	if bestShell > 0 then return {winIndex:bestShell, state:"shell"}
-	return {winIndex:0, state:"none"}
+	if bestIdle is not missing value then return {winID:bestIdle, state:"claude-idle"}
+	if bestBusy is not missing value then return {winID:bestBusy, state:"claude-busy"}
+	if bestShell is not missing value then return {winID:bestShell, state:"shell"}
+	return {winID:missing value, state:"none"}
 end findClaudeWindow
 
-on activateTerminalWindow(winIndex)
+on activateTerminalWindow(wID)
+	-- Bring the window with the given id to the absolute front and ensure
+	-- Terminal is the frontmost application. Uses window id (stable) rather
+	-- than window index (shifts as windows reorder).
 	tell application "Terminal"
 		activate
 		try
-			set index of window winIndex to 1
+			-- Unminimize if needed, so activation actually reveals the window.
+			if miniaturized of window id wID then
+				set miniaturized of window id wID to false
+			end if
 		end try
-		try
-			set frontmost of window winIndex to true
-		end try
+		-- Raise to top of window stack
+		set index of window id wID to 1
+		-- Mark as key window
+		set frontmost of window id wID to true
 	end tell
-	delay 0.4
+	delay 0.5
+	-- Double-confirm at the process level: System Events is what actually
+	-- routes keystrokes, so Terminal's process must be frontmost here too.
+	try
+		tell application "System Events"
+			tell process "Terminal" to set frontmost to true
+		end tell
+	end try
+	delay 0.3
 end activateTerminalWindow
+
+on waitForClaudeIdleByID(wID, timeoutSec)
+	-- Like waitForClaudeIdle but uses window id.
+	set elapsed to 0
+	repeat while elapsed < timeoutSec
+		try
+			tell application "Terminal" to set c to contents of tab 1 of window id wID
+			if my classifyWindowContents(c) is "claude-idle" then return true
+		end try
+		delay pollIntervalSec
+		set elapsed to elapsed + pollIntervalSec
+	end repeat
+	return false
+end waitForClaudeIdleByID
 
 on sendKeystrokes(txt)
 	tell application "System Events"
@@ -136,28 +169,23 @@ on sendKeystrokes(txt)
 	end tell
 end sendKeystrokes
 
-on waitForClaudeIdle(winIndex, timeoutSec)
-	-- Polls the given window until it reaches claude-idle or timeout.
-	set elapsed to 0
-	repeat while elapsed < timeoutSec
-		try
-			tell application "Terminal" to set c to contents of tab 1 of window winIndex
-			if my classifyWindowContents(c) is "claude-idle" then return true
-		end try
-		delay pollIntervalSec
-		set elapsed to elapsed + pollIntervalSec
-	end repeat
-	return false
-end waitForClaudeIdle
-
 on openNewTerminalAndStartClaude(claudeBin)
-	-- Opens a new window, starts Claude, returns the window index.
+	-- Opens a new window, starts Claude, returns the STABLE window id
+	-- (not the positional index) so callers can refer to it reliably even
+	-- as other windows open/close/reorder.
 	tell application "Terminal"
 		activate
-		do script "cd ~ && clear && " & (quoted form of claudeBin) & " " & claudeArgs
+		set newTab to do script "cd ~ && clear && " & (quoted form of claudeBin) & " " & claudeArgs
 		delay 0.3
+		-- `do script` returns a tab; its containing window is the one we just created.
+		try
+			set newWinID to id of (first window whose tabs contains newTab)
+		on error
+			-- Fallback: whichever window is frontmost right now.
+			set newWinID to id of front window
+		end try
 	end tell
-	return 1
+	return newWinID
 end openNewTerminalAndStartClaude
 
 -- ---------- Main ----------
@@ -189,13 +217,13 @@ on run
 
 	-- Find the best existing window.
 	set found to my findClaudeWindow()
-	set winIdx to winIndex of found
+	set wID to winID of found
 	set state to state of found
 
 	if state is "claude-idle" then
-		my speak("Claude is ready in window " & winIdx & ". Entering voice mode.")
+		my speak("Claude is ready. Bringing the window to the front and entering voice mode.")
 		try
-			my activateTerminalWindow(winIdx)
+			my activateTerminalWindow(wID)
 			my sendKeystrokes(voiceCmd)
 			my speak("Voice mode starting.")
 		on error errMsg
@@ -205,10 +233,10 @@ on run
 	end if
 
 	if state is "claude-busy" then
-		my speak("Claude is busy in window " & winIdx & ". Waiting up to " & busyTimeoutSec & " seconds.")
-		if my waitForClaudeIdle(winIdx, busyTimeoutSec) then
+		my speak("Claude is busy. Waiting up to " & busyTimeoutSec & " seconds.")
+		if my waitForClaudeIdleByID(wID, busyTimeoutSec) then
 			try
-				my activateTerminalWindow(winIdx)
+				my activateTerminalWindow(wID)
 				my sendKeystrokes(voiceCmd)
 				my speak("Voice mode starting.")
 				return
@@ -225,16 +253,16 @@ on run
 	-- No idle Claude (or it stayed busy): open a new window and start fresh.
 	my speak("Opening a new Terminal window and starting Claude Code.")
 	try
-		set newIdx to my openNewTerminalAndStartClaude(claudeBin)
+		set newID to my openNewTerminalAndStartClaude(claudeBin)
 	on error errMsg
 		my speakError("Could not start Claude. " & errMsg)
 		return
 	end try
 
 	my speak("Waiting for Claude to be ready.")
-	if my waitForClaudeIdle(newIdx, startupTimeoutSec) then
+	if my waitForClaudeIdleByID(newID, startupTimeoutSec) then
 		try
-			my activateTerminalWindow(newIdx)
+			my activateTerminalWindow(newID)
 			my sendKeystrokes(voiceCmd)
 			my speak("Voice mode starting.")
 		on error errMsg
