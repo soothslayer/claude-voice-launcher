@@ -1,0 +1,8 @@
+.DS_Store
+*.swp
+*.swo
+*.bak
+# Compiled .app bundles — users compile locally via install.sh
+*.app/
+# Shell editor backups
+*~
