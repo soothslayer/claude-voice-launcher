@@ -77,7 +77,7 @@ on sendKeystrokes(txt)
 	try
 		set priorClip to the clipboard
 	end try
-
+	
 	try
 		tell application "System Events"
 			if not (frontmost of process "Terminal") then
@@ -88,10 +88,10 @@ on sendKeystrokes(txt)
 			end if
 		end tell
 	end try
-
+	
 	set the clipboard to txt
 	delay 0.2
-
+	
 	set pasteOK to false
 	try
 		tell application "System Events"
@@ -103,7 +103,7 @@ on sendKeystrokes(txt)
 		end tell
 		set pasteOK to true
 	end try
-
+	
 	if not pasteOK then
 		try
 			tell application "System Events"
@@ -115,7 +115,7 @@ on sendKeystrokes(txt)
 			end tell
 		end try
 	end if
-
+	
 	delay 0.5
 	if priorClip is not missing value then
 		try
@@ -127,7 +127,7 @@ end sendKeystrokes
 on openNewTerminalAndStartClaude(claudeBin, reuseFrontWindow)
 	-- If reuseFrontWindow is true, run the command in the existing front window
 	-- (avoids opening a second window when Terminal just launched with an empty one).
-	set cmd to "cd ~ && clear && " & (quoted form of claudeBin) & " " & claudeArgs
+	set cmd to "cd ~ && clear && " & (quoted form of claudeBin) & " " & claudeArgs & " " & quoted form of voiceCmd
 	tell application "Terminal"
 		activate
 		if reuseFrontWindow then
@@ -151,7 +151,7 @@ end openNewTerminalAndStartClaude
 
 on run
 	my speak("Starting Claude voice mode.")
-
+	
 	set terminalWasRunning to true
 	try
 		if application "Terminal" is not running then
@@ -164,13 +164,13 @@ on run
 		my speakError("Could not reach Terminal. " & errMsg)
 		return
 	end try
-
+	
 	if terminalWasRunning then
 		set wID to my findClaudeWindow()
 	else
 		set wID to missing value
 	end if
-
+	
 	if wID is missing value then
 		my speak("No Claude Code window found. Opening a new one.")
 		set claudeBin to my findClaudeBin()
@@ -184,17 +184,20 @@ on run
 			my speakError("Could not start Claude. " & errMsg)
 			return
 		end try
-		-- Give Claude time to start up before sending the voice command.
-		delay 6
+		try
+			my activateTerminalWindow(wID)
+			my speak("Voice mode starting.")
+		on error errMsg
+			my speakError("Could not focus the Claude window. " & errMsg)
+		end try
 	else
 		my speak("Found Claude Code window. Bringing it to the front.")
+		try
+			my activateTerminalWindow(wID)
+			my sendKeystrokes(voiceCmd)
+			my speak("Voice mode starting.")
+		on error errMsg
+			my speakError("Could not send the voice command. " & errMsg)
+		end try
 	end if
-
-	try
-		my activateTerminalWindow(wID)
-		my sendKeystrokes(voiceCmd)
-		my speak("Voice mode starting.")
-	on error errMsg
-		my speakError("Could not send the voice command. " & errMsg)
-	end try
 end run
