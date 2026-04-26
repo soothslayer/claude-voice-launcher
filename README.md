@@ -40,6 +40,20 @@ The installer:
 5. **Pre-accepts Claude Code's "Do you trust the files in this folder?" dialog** for `$HOME` (the directory the launcher uses) by writing `hasTrustDialogAccepted: true` into `~/.claude.json` under `projects.$HOME`. Skips a guaranteed stall for a blind user. Run `python3 scripts/pre-trust-directory.py /path/to/dir` to pre-trust any other directory.
 6. Launches the **interactive, voice-narrated permissions setup** which opens each required System Settings pane and tells you what to toggle.
 
+## Change the directory Claude starts in
+
+By default the launcher runs `claude` from `$HOME`. To start in a different directory, write the path to `~/.claude-voice-launcher-dir`:
+
+```bash
+echo "~/git/my-project" > ~/.claude-voice-launcher-dir
+```
+
+`~` and `$HOME` are expanded. If the file is missing, empty, or points to a directory that doesn't exist, the launcher falls back to `$HOME`. Remember to pre-trust the new directory so Claude doesn't stall on its trust prompt:
+
+```bash
+python3 scripts/pre-trust-directory.py ~/git/my-project
+```
+
 ## How to trigger it
 
 Three redundant triggers — use whichever works for you:
