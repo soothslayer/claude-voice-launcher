@@ -50,6 +50,17 @@ chmod +x \
 	"$BIN_DIR/install-voice-control-command.sh" \
 	"$BIN_DIR/install-siri-shortcut.sh"
 
+# Copy session management commands into ~/bin
+if [ -d "$SCRIPT_DIR/commands" ]; then
+	echo "==> Installing session management commands into $BIN_DIR"
+	for cmd in "$SCRIPT_DIR"/commands/*.command; do
+		[ -f "$cmd" ] || continue
+		cp "$cmd" "$BIN_DIR/"
+		chmod +x "$BIN_DIR/$(basename "$cmd")"
+		echo "    $(basename "$cmd")"
+	done
+fi
+
 # Pre-trust $HOME in ~/.claude.json so Claude Code's "Do you trust the files
 # in this folder?" dialog doesn't stall the launcher. For a blind user, any
 # interactive prompt is a failure mode — skip it proactively.

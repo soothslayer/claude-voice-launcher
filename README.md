@@ -86,12 +86,59 @@ The launcher reads `contents of tab 1 of window N` for every Terminal window and
 
 If Claude Code's TUI changes and detection breaks, tune the marker lists at the top of [`claude-voice-launcher.applescript`](claude-voice-launcher.applescript) and re-run `install.sh`.
 
+## Session management commands
+
+The `commands/` directory contains scripts for managing Claude Code voice sessions. The installer copies them to `~/bin/`. Each is a `.command` file (double-clickable in Finder, or invocable via Siri app bundles).
+
+| Command | What it does |
+|---|---|
+| `start-claudette.command` | Kill everything, start a fresh Claude Code voice session in tmux |
+| `resume-claudette.command` | Re-enter voice mode in an existing session; starts fresh if session is dead |
+| `wake-claudette.command` | Smart handler: detects if Claude is idle, thinking, or not running — asks before interrupting |
+| `pause-claudette.command` | Send Escape to stop voice mode without killing the session |
+| `end-claudette.command` | Fully stop Claude Code and close the tmux session |
+| `back-to-claudette.command` | Kill Hermes voice, resume Claudette voice mode |
+| `talk-to-hermes.command` | Pause Claudette, launch Hermes voice (requires `hermes-voice` on PATH) |
+| `fix-audio.command` | Restart coreaudiod to fix frozen mics; installs a passwordless sudo rule |
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLAUDE_VOICE_PROJECT_DIR` | `$HOME` | Working directory for Claude Code sessions |
+| `VOICEMODE_STT_BASE_URLS` | `http://127.0.0.1:8901/v1` | Speech-to-text endpoint |
+| `VOICEMODE_WHISPER_PORT` | `8901` | STT port number |
+
+### Creating Siri app bundles
+
+To trigger any command via "Hey Siri, open [Name]":
+
+```bash
+osacompile -o ~/Applications/"Wake Claudette.app" -e 'do shell script "open ~/bin/wake-claudette.command"'
+/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Wake Claudette'" ~/Applications/"Wake Claudette.app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.$(id -un).wake-claudette" ~/Applications/"Wake Claudette.app/Contents/Info.plist"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f ~/Applications/"Wake Claudette.app"
+mdimport ~/Applications/"Wake Claudette.app"
+```
+
+Both `CFBundleName` and `CFBundleIdentifier` are required — without them, Siri won't find the app. The `lsregister` + `mdimport` steps register it with Launch Services and Spotlight.
+
+### Audio device detection
+
+The scripts auto-detect audio hardware via `SwitchAudioSource` (install with `brew install switchaudio-osx`). Currently configured for:
+
+- **DY106** — Bluetooth headset (output, fallback input)
+- **K66** — USB microphone (preferred input)
+
+If your devices have different names, the scripts gracefully skip — no errors, just no switching.
+
 ## Files
 
 | File | Purpose |
 |---|---|
 | [`claude-voice-launcher.applescript`](claude-voice-launcher.applescript) | The brain — window classification, keystroke injection, narration |
 | [`claude-voice-setup.command`](claude-voice-setup.command) | One-time narrated permissions primer (double-clickable) |
+| [`commands/`](commands/) | Session management scripts (start, resume, wake, pause, end, switch) |
 | [`install-voice-control-command.sh`](install-voice-control-command.sh) | Narrated guide for adding the Voice Control custom command |
 | [`install-siri-shortcut.sh`](install-siri-shortcut.sh) | Narrated guide for creating the Siri Shortcut |
 | [`install.sh`](install.sh) | One-shot installer that wires everything up |
